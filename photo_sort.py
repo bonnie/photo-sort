@@ -22,8 +22,10 @@ def make_directory(dirname):
         print "*****made directory", dirname
 
 
-def place_photo(item, item_fullpath, copy=False):
+def place_photo(item, parent_dir, copy=False):
     """given the full path to a photo, move or copy it to the backup dir"""
+
+    item_fullpath = os.path.join(parent_dir, item)
 
     if os.path.isfile(item_fullpath) and item[0] != '.':
         file_date_unix = os.path.getmtime(item_fullpath)
@@ -70,51 +72,54 @@ def organize_loose():
     """organize loose photos in the PHOTOPATH directory"""
 
     for item in os.listdir(PHOTOPATH):
-        item_fullpath = os.path.join(PHOTOPATH, item)
-        place_photo(item, item_fullpath)
+        place_photo(item, PHOTOPATH)
 
 
 def organize_osx_photos():
-    """copy photos from the OSX photos app to dropbox backup"""
+    """copy photos from the OSX photos app to dropbox backup
+
+    take care to spend as little time as possible on already-processed folders
+    """
 
     # load in all the dirs we've already processed
     history_file = open(OSX_ALREADY_PROCESSED, 'r')
-    already_processed = history_file.read().split('\n')
+    last_date = history_file.read().rstrip()
     history_file.close()
 
-    history_file = open(OSX_ALREADY_PROCESSED, 'a')
+    history_file = open(OSX_ALREADY_PROCESSED, 'w')
 
-    today = datetime.datetime.now().strftime('%Y-%m-%d')
+    # get the latest date we are looking at
+    lyear, lmonth, lday = last_date.split('-')
 
     # drill down
     for year in os.listdir(OSX_PHOTOPATH):
+        if year < lyear:
+            continue
         yeardir = os.path.join(OSX_PHOTOPATH, year)
+
         for month in os.listdir(yeardir):
+            if month < lmonth:
+                continue
             monthdir = os.path.join(yeardir, month)
+
             for date in os.listdir(monthdir):
-
-                # skip folders that have already been processed -- unless it's
-                # today's folder, which might have had additions
-                thisdir = '-'.join([year, month, date])
-
-                if thisdir in already_processed and thisdir != today:
+                if date < lday:
                     continue
 
-                # otherwise, proceed
+                # if we got here, the directory needs to be processed
                 datedir = os.path.join(monthdir, date)
 
-                # for fun, each file is in its own special directory
+                # for fun, osx puts each file in its own special directory
                 for container in os.listdir(datedir):
                     container_dir = os.path.join(datedir, container)
                     for photo in os.listdir(container_dir):
                         place_photo(
                             item=photo,
-                            item_fullpath=os.path.join(container_dir, photo),
+                            parent_dir=container_dir,
                             copy=True)
 
-                # mark datedir as already processed
-                history_file.write(thisdir + '\n')
-
+    # write the last date to the file
+    history_file.write('-'.join([year, month, date]))
     history_file.close()
 
 # end organize_osx_photos #
